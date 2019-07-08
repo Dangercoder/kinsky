@@ -17,6 +17,8 @@
            org.apache.kafka.common.Node
            org.apache.kafka.common.PartitionInfo
            org.apache.kafka.common.TopicPartition
+           org.apache.kafka.common.header.Header
+           org.apache.kafka.common.header.Headers
            org.apache.kafka.common.errors.WakeupException
            org.apache.kafka.common.serialization.Deserializer
            org.apache.kafka.common.serialization.Serializer
@@ -117,7 +119,7 @@
 
 (defprotocol ProducerDriver
   "Driver interface for producers"
-  (send!          [this record] [this topic k v]
+  (send!          [this record] [this topic k v] [this k v headers]
     "Produce a record on a topic.
      When using the single arity version, a map
      with the following possible keys is expected:
@@ -336,12 +338,19 @@
   "
   (comp (map :by-partition) (mapcat vals) cat))
 
+(defn headers->map [^Headers headers]
+  "Turns Kafka Headers into a map."
+  (into {} (map (fn [^Header header]
+                  (let [value (slurp (.value header) :encoding "UTF-8")]
+                    [(.key header) value]) headers))))
+
 (defn cr->data
   "Yield a clojure representation of a consumer record"
   [^ConsumerRecord cr]
   {:key       (.key cr)
    :offset    (.offset cr)
    :partition (.partition cr)
+   :headers   (headers->map (.headers cr))
    :timestamp (.timestamp cr)
    :topic     (.topic cr)
    :value     (.value cr)})
@@ -452,13 +461,29 @@
     (poll! consumer timeout)
     (catch WakeupException _)))
 
+(defn ->header
+  "Build a header from a key and a value"
+  (^Header
+  [[k v]]
+   (->header k v))
+  (^Header
+  [k v]
+   (reify
+     Header
+     (key [_] k)
+     (value [_] v))))
+
+(defn ->headers [headers]
+  "Build headers from a clojure map."
+  (map ->header headers))
+
 (defn ->record
   "Build a producer record from a clojure map. Leave ProducerRecord instances
    untouched."
   [payload]
   (if (instance? ProducerRecord payload)
     payload
-    (let [{:keys [partition key value]} payload
+    (let [{:keys [partition key value headers]} payload
           topic                         (some-> payload :topic name)]
       (cond
         (nil? topic)
@@ -466,6 +491,9 @@
 
         (and key partition)
         (ProducerRecord. (str topic) (int partition) key value)
+
+        headers
+        (ProducerRecord. (str topic) nil key value (->headers headers))
 
         key
         (ProducerRecord. (str topic) key value)
@@ -496,6 +524,9 @@
       (.send producer (->record record)))
     (send! [this topic k v]
       (.send producer (->record {:key k :value v :topic topic})))
+    (send! [this topic k v headers]
+      (.send producer (->record {:key k :value v :topic topic :headers headers}))
+      )
     (flush! [this]
       (.flush producer))
     (init-transactions! [this]

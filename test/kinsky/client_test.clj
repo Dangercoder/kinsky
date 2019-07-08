@@ -87,3 +87,4 @@
   (testing "collection of keywords"
     (let [consumer (client/consumer {:bootstrap.servers "localhost:9092"} :string :string)]
       (client/subscribe! consumer [:x :y :z]))))
+
