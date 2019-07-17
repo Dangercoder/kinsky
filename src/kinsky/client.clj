@@ -525,8 +525,7 @@
     (send! [this topic k v]
       (.send producer (->record {:key k :value v :topic topic})))
     (send! [this topic k v headers]
-      (.send producer (->record {:key k :value v :topic topic :headers headers}))
-      )
+      (.send producer (->record {:key k :value v :topic topic :headers headers})))
     (flush! [this]
       (.flush producer))
     (init-transactions! [this]
