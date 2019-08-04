@@ -119,7 +119,7 @@
 
 (defprotocol ProducerDriver
   "Driver interface for producers"
-  (send!          [this record] [this topic k v] [this k v headers]
+  (send!          [this record] [this topic k v] [this topic k v headers]
     "Produce a record on a topic.
      When using the single arity version, a map
      with the following possible keys is expected:
